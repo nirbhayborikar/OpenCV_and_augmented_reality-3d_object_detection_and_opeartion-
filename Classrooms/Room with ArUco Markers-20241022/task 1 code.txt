@@ -1,0 +1,82 @@
+import cv2 as cv
+import numpy as np
+
+# Load different ArUco dictionaries to try
+aruco_dicts = [
+    cv.aruco.DICT_4X4_50, cv.aruco.DICT_5X5_100, cv.aruco.DICT_6X6_250, cv.aruco.DICT_7X7_1000
+]
+
+# Read the image
+image_path = 'C:\\Users\\Lenovo\\Desktop\\rwu\\computer vision\\Room with ArUco Markers-20241022\\20221115_113440.jpg'
+image = cv.imread(image_path)
+
+if image is None:
+    print("Error: Image not loaded. Check the file path.")
+else:
+    # Resize the image to scale up (if the marker is small in the image)
+    scale_factor = 1.5
+    resized_image = cv.resize(image, (0, 0), fx=scale_factor, fy=scale_factor)
+
+    # Convert to grayscale
+    gray = cv.cvtColor(resized_image, cv.COLOR_BGR2GRAY)
+    gray = cv.equalizeHist(gray)  # Increase contrast
+
+    # Load the image you want to insert into the marker (ensure this image is of the correct size)
+    insert_image_path = 'C:\\Users\\Lenovo\\Pictures\\tollwood.jpg'  # Replace with your insert image path
+    insert_image = cv.imread(insert_image_path)
+
+    if insert_image is None:
+        print("Error: Image to insert not loaded. Check the file path.")
+    else:
+        detected = False
+        for dict_type in aruco_dicts:
+            aruco_dict = cv.aruco.getPredefinedDictionary(dict_type)
+            corners, ids, _ = cv.aruco.detectMarkers(gray, aruco_dict)
+            if ids is not None:
+                print(f"Markers detected using dictionary: {dict_type}")
+                detected = True
+
+                for corner in corners:
+                    # Get the four corners of the detected marker
+                    pts1 = np.array(corner[0], dtype=np.float32)
+
+                    # Get the size of the insert image
+                    insert_height, insert_width = insert_image.shape[:2]
+
+                    # Define the destination points to fit the insert image into the marker
+                    pts2 = np.array([
+                        [0, 0],  # Top-left corner
+                        [insert_width - 1, 0],  # Top-right corner
+                        [insert_width - 1, insert_height - 1],  # Bottom-right corner
+                        [0, insert_height - 1]  # Bottom-left corner
+                    ], dtype=np.float32)
+
+                    # Calculate the perspective transform matrix
+                    matrix = cv.getPerspectiveTransform(pts2, pts1)
+
+                    # Warp the insert image to fit the marker
+                    warped_image = cv.warpPerspective(insert_image, matrix, (resized_image.shape[1], resized_image.shape[0]))
+
+                    # Mask the region inside the marker to blend the warped image
+                    mask = np.zeros_like(resized_image, dtype=np.uint8)
+                    cv.fillConvexPoly(mask, pts1.astype(int), (255, 255, 255))
+
+                    # Add the warped image to the original image
+                    warped_image_masked = cv.bitwise_and(warped_image, mask)
+                    result = cv.bitwise_and(resized_image, cv.bitwise_not(mask))
+                    final_image = cv.add(result, warped_image_masked)
+
+                # Resize detected image to a standard size for display
+                new_width = 800
+                new_height = 600
+                resized_detected_image = cv.resize(final_image, (new_width, new_height))
+
+                # Display the final image with the inserted image in the marker
+                cv.imshow('Final Image with Inserted ArUco Markers', resized_detected_image)
+                cv.waitKey(0)
+                cv.destroyAllWindows()
+
+                break
+
+        if not detected:
+            print("No ArUco markers detected with any dictionary.")
